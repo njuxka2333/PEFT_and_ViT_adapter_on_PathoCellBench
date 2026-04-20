@@ -1,0 +1,77 @@
+project: patho_benchmark
+experiment: uni2_vit_adapter
+experiment_path: experiments
+training_steps: 20000
+log_interval: 10
+val_interval: 200
+multiprocessing: true
+num_workers: 2
+seed: 42
+primary_metric: f1_score_macro
+save_all_ckpts: false
+early_stopping: 5000
+
+dataset:
+  name: phenecell
+  batch_size: 8
+  uniform_class_sampling: true
+  sample_excluded_classes: false
+  path: /Path/to/PathoCell/data/phenocell/phenocell_lmdb
+  split: /Path/to/PathoCell/data/phenocell/splits/phenocell_dataset_split.csv
+  label_dict: /Path/to/PathoCell/data/phenocell/label_dict.json
+
+model:
+  model_wrapper: ViTAdapterUNI2
+  backbone: uni2
+  unfreeze_backbone: false
+  do_ms_aug: false
+  interaction_indexes:
+    - [0, 5]
+    - [6, 11]
+    - [12, 17]
+    - [18, 23]
+  adapter_out_channels: 256
+  decoder_hidden_dim: 256
+  strict_mapping: false
+  load_pretrained: true
+
+optimizer:
+  name: AdamW
+  params:
+    lr: 3.0e-05
+    weight_decay: 0.05
+  warmup_steps: 1000
+
+scheduler:
+  name: CosineAnnealingLR
+  params:
+    T_max: 20000
+    eta_min: 1.0e-06
+
+loss_fn:
+  name: CrossEntropyLoss
+  params:
+    label_smoothing: 0.05
+    reduction: none
+  class_weighting: true
+  exclude_classes: [0]
+
+augmentations:
+  RandomHorizontalFlip:
+    p: 0.5
+  RandomVerticalFlip:
+    p: 0.5
+  RandomAffine:
+    degrees: [0, 360]
+    translate: 0.1
+    scale: [0.8, 1.2]
+    resample: BILINEAR
+  RandomElasticTransform:
+    kernel_size: [63, 63]
+    sigma: [32.0, 32.0]
+    alpha: [1.0, 1.0]
+  HEDNormalize:
+    sigma: 0.025
+    bias: 0.05
+
+save_snapshots: false

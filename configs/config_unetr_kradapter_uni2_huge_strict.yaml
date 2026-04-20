@@ -1,0 +1,99 @@
+# UNI2-h (MahmoodLab/UNI2-h) + KRAdapter + UNETR decoder — strict two-group AdamW + cosine warmup.
+#
+# Multi-scale backbone taps (timm 0-based block indices, depth=24 in configs/models/uni2.yaml):
+#   You asked for “第 8, 16, 24, 32 层”; this checkpoint has depth 24 → no block index 31 (layer 32).
+#   We use four late blocks [7, 15, 22, 23] ≈ 1-based layers 8, 16, 23, 24 (deepest four aligned to tail).
+#   To match the common UNI2 skip pattern 6/12/18/24 (1-based), set:
+#     backbone_out_indices: [5, 11, 17, 23]
+#
+# Effective batch per optimizer step:
+#   batch_size * num_GPUs * grad_accum_steps
+#   Default below targets 128 on a single GPU: 16 * 1 * 8 = 128.
+#   On 8 GPUs with batch_size=16, set grad_accum_steps: 1 for the same 128.
+
+project: patho_benchmark
+experiment: unetr_kradapter_uni2_huge_strict
+experiment_path: experiments
+training_steps: 50000
+log_interval: 10
+val_interval: 200
+multiprocessing: true
+num_workers: 4
+seed: 42
+primary_metric: f1_score_macro
+save_all_ckpts: false
+early_stopping: 5000
+
+dataset:
+  name: phenecell
+  batch_size: 16
+  uniform_class_sampling: true
+  sample_excluded_classes: false
+  path: /jhcnas1/houjunlin/fxx/PathoCell/data/phenocell/phenocell_lmdb
+  split: /jhcnas1/houjunlin/fxx/PathoCell/data/phenocell/splits/phenocell_dataset_split.csv
+  label_dict: /jhcnas1/houjunlin/fxx/PathoCell/data/phenocell/label_dict.json
+
+model:
+  model_wrapper: UnetR
+  backbone: uni2
+  unfreeze_backbone: false
+  unfreeze_layernorm: false
+  do_ms_aug: false
+  lora_r: null
+  kradapter_enable: true
+  kradapter_bottleneck_dim: 32
+  kradapter_rank_order: 2
+  kradapter_alpha: 1.0
+  kradapter_dropout: 0.0
+  kradapter_attn_only: false
+  kradapter_mlp_only: false
+  backbone_out_indices: [7, 15, 22, 23]
+
+optimizer:
+  name: AdamW
+  params:
+    lr: 1.0e-4
+    eps: 1.0e-8
+    weight_decay: 0.05
+  warmup_steps: 1000
+  grad_accum_steps: 8
+  strict_two_group: true
+  kradapter_lr: 1.0e-4
+  kradapter_weight_decay: 0.05
+  decoder_lr: 1.0e-4
+  decoder_weight_decay: 0.05
+
+scheduler:
+  name: CosineAnnealingLR
+  params:
+    T_max: 49000
+    eta_min: 1.0e-6
+
+loss_fn:
+  name: CrossEntropyLoss
+  params:
+    label_smoothing: 0.0
+    reduction: none
+  class_weighting: true
+  exclude_classes: [0]
+
+augmentations:
+  RandomHorizontalFlip:
+    p: 0.5
+  RandomVerticalFlip:
+    p: 0.5
+  RandomAffine:
+    degrees: [0, 360]
+    translate: 0.1
+    scale: [0.8, 1.2]
+    resample: BILINEAR
+  RandomElasticTransform:
+    kernel_size: [63, 63]
+    sigma: [32.0, 32.0]
+    alpha: [1.0, 1.0]
+  HEDNormalize:
+    sigma: 0.025
+    bias: 0.05
+  Normalize:
+    mean: [0.485, 0.456, 0.406]
+    std: [0.229, 0.224, 0.225]
